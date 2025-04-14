@@ -64,22 +64,22 @@ func NewApiCollector(apiURL, apiKey string, debug bool, namespace string) *ApiCo
 		max: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: ns,
 			Name:      "max",
-			Help:      "Maximum value from external API",
+			Help:      "Maximum number of emails by cycle",
 		}),
 		remaining: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: ns,
 			Name:      "remaining",
-			Help:      "Remaining value from external API",
+			Help:      "Remaining number of emails for this cycle",
 		}),
 		used: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: ns,
 			Name:      "used",
-			Help:      "Used value from external API",
+			Help:      "Used number of email for this cycle",
 		}),
 		remainingSeconds: prometheus.NewGauge(prometheus.GaugeOpts{
 			Namespace: ns,
 			Name:      "remaining_seconds",
-			Help:      "Seconds remaining until cycle_end",
+			Help:      "Seconds remaining until end of this cycle",
 		}),
 	}
 }
@@ -175,9 +175,9 @@ func (c *ApiCollector) collectEmailCycleMetrics(ch chan<- prometheus.Metric) {
 }
 
 func main() {
-	apiURL := flag.String("api-url", "", "Base API URL (e.g., https://example.com/api)")
+	apiURL := flag.String("api-url", "https://api.smtp2go.com/v3/", "Base API URL (e.g., https://api.smtp2go.com/v3/)")
 	apiKey := flag.String("api-key", "", "API key for authentication")
-	listenAddress := flag.String("listen-address", ":2112", "Address to expose metrics (e.g., :2112 or 0.0.0.0:8080)")
+	listenAddress := flag.String("listen-address", ":22112", "Address to expose metrics (e.g., :22112 or 0.0.0.0:8080)")
 	debug := flag.Bool("debug", false, "Enable debug logging")
 	flag.Parse()
 
