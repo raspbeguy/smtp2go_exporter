@@ -106,4 +106,9 @@ smtp2go_email_unsubs_unsubscribes 0
 
 ## TODO
 
-* Implement other API methods
+* Clean the code
+* Probably add some tests
+
+## Contribute
+
+Feel free to submit patches. There is also a [Matrix room](https://matrix.to/#/#smtp2go_exporter:gugod.fr) for this project.
