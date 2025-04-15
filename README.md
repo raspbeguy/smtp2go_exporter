@@ -78,6 +78,18 @@ smtp2go_email_history_unsubscribes{email_address="bob@example.tld""} 0
 # TYPE smtp2go_email_history_used gauge
 smtp2go_email_history_used{email_address="alice@example.tld""} 407
 smtp2go_email_history_used{email_address="bob@example.tld""} 7
+# HELP smtp2go_email_spam_emails Number of emails processed
+# TYPE smtp2go_email_spam_emails gauge
+smtp2go_email_spam_emails 415
+# HELP smtp2go_email_spam_rejects Number of rejected emails
+# TYPE smtp2go_email_spam_rejects gauge
+smtp2go_email_spam_rejects 108
+# HELP smtp2go_email_spam_spam_percent Percentage of spam emails
+# TYPE smtp2go_email_spam_spam_percent gauge
+smtp2go_email_spam_spam_percent 0
+# HELP smtp2go_email_spam_spams Number of emails marked as spam
+# TYPE smtp2go_email_spam_spams gauge
+smtp2go_email_spam_spams 0
 ```
 
 ## TODO

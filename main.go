@@ -423,6 +423,120 @@ func (c *EmailHistoryCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
+// -----------------------------
+// EmailSpamCollector
+// -----------------------------
+
+type EmailSpamData struct {
+	Emails       float64 `json:"emails"`
+	Rejects      float64 `json:"rejects"`
+	Spams        float64 `json:"spams"`
+	SpamPercent  string  `json:"spam_percent"`
+}
+
+type EmailSpamResponse struct {
+	RequestID string         `json:"request_id"`
+	Data      EmailSpamData  `json:"data"`
+}
+
+type EmailSpamCollector struct {
+	mutex     sync.Mutex
+	apiURL    string
+	apiKey    string
+	debug     bool
+	namespace string
+
+	emails       prometheus.Gauge
+	rejects      prometheus.Gauge
+	spams        prometheus.Gauge
+	spamPercent  prometheus.Gauge
+}
+
+func NewEmailSpamCollector(apiURL, apiKey string, debug bool) *EmailSpamCollector {
+	ns := "smtp2go_email_spam"
+
+	return &EmailSpamCollector{
+		apiURL:    apiURL,
+		apiKey:    apiKey,
+		debug:     debug,
+		namespace: ns,
+		emails: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: ns,
+			Name:      "emails",
+			Help:      "Number of emails processed",
+		}),
+		rejects: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: ns,
+			Name:      "rejects",
+			Help:      "Number of rejected emails",
+		}),
+		spams: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: ns,
+			Name:      "spams",
+			Help:      "Number of emails marked as spam",
+		}),
+		spamPercent: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: ns,
+			Name:      "spam_percent",
+			Help:      "Percentage of spam emails",
+		}),
+	}
+}
+
+func (c *EmailSpamCollector) Describe(ch chan<- *prometheus.Desc) {
+	c.emails.Describe(ch)
+	c.rejects.Describe(ch)
+	c.spams.Describe(ch)
+	c.spamPercent.Describe(ch)
+}
+
+func (c *EmailSpamCollector) Collect(ch chan<- prometheus.Metric) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	endpoint := c.apiURL + "/stats/email_spam"
+
+	reqBody, _ := json.Marshal(map[string]string{"api_key": c.apiKey})
+	req, _ := http.NewRequest("POST", endpoint, bytes.NewBuffer(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Println("[email_spam] HTTP request failed:", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	if c.debug {
+		log.Printf("[email_spam] Raw response: %s\n", string(body))
+	}
+
+	var apiResp EmailSpamResponse
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		log.Println("[email_spam] Failed to parse JSON:", err)
+		return
+	}
+
+	data := apiResp.Data
+	c.emails.Set(data.Emails)
+	c.rejects.Set(data.Rejects)
+	c.spams.Set(data.Spams)
+
+	percent, err := strconv.ParseFloat(data.SpamPercent, 64)
+	if err != nil {
+		log.Println("[email_spam] Failed to parse spam_percent:", err)
+	} else {
+		c.spamPercent.Set(percent)
+	}
+
+	c.emails.Collect(ch)
+	c.rejects.Collect(ch)
+	c.spams.Collect(ch)
+	c.spamPercent.Collect(ch)
+}
+
 func main() {
 	apiURL := flag.String("apiURL", "https://api.smtp2go.com/v3", "Base URL of the API (e.g., https://api.smtp2go.com/v3)")
 	apiKey := flag.String("apiKey", "", "API key for authentication")
@@ -442,10 +556,12 @@ func main() {
 	emailCycle := NewEmailCycleCollector(*apiURL, *apiKey, *debug)
 	emailBounces := NewEmailBouncesCollector(*apiURL, *apiKey, *debug)
 	emailHistory := NewEmailHistoryCollector(*apiURL, *apiKey, *debug)
+	emailSpam := NewEmailSpamCollector(*apiURL, *apiKey, *debug)
 
 	prometheus.MustRegister(emailCycle)
 	prometheus.MustRegister(emailBounces)
 	prometheus.MustRegister(emailHistory)
+	prometheus.MustRegister(emailSpam)
 
 	http.Handle("/metrics", promhttp.Handler())
 	log.Printf("Starting exporter on %s...\n", *listenAddr)
