@@ -35,28 +35,28 @@ import (
 // -----------------------------
 
 type EmailCycleData struct {
-	CycleStart    string  `json:"cycle_start"`
-	CycleEnd      string  `json:"cycle_end"`
-	CycleUsed     float64 `json:"cycle_used"`
+	CycleStart     string  `json:"cycle_start"`
+	CycleEnd       string  `json:"cycle_end"`
+	CycleUsed      float64 `json:"cycle_used"`
 	CycleRemaining float64 `json:"cycle_remaining"`
-	CycleMax      float64 `json:"cycle_max"`
+	CycleMax       float64 `json:"cycle_max"`
 }
 
 type EmailCycleResponse struct {
-	RequestID string          `json:"request_id"`
-	Data      EmailCycleData  `json:"data"`
+	RequestID string         `json:"request_id"`
+	Data      EmailCycleData `json:"data"`
 }
 
 type EmailCycleCollector struct {
-	mutex      sync.Mutex
-	apiURL     string
-	apiKey     string
-	debug      bool
-	namespace  string
+	mutex     sync.Mutex
+	apiURL    string
+	apiKey    string
+	debug     bool
+	namespace string
 
-	used            prometheus.Gauge
-	remaining       prometheus.Gauge
-	max             prometheus.Gauge
+	used             prometheus.Gauge
+	remaining        prometheus.Gauge
+	max              prometheus.Gauge
 	remainingSeconds prometheus.Gauge
 }
 
@@ -159,8 +159,8 @@ type EmailBouncesData struct {
 }
 
 type EmailBouncesResponse struct {
-	RequestID string            `json:"request_id"`
-	Data      EmailBouncesData  `json:"data"`
+	RequestID string           `json:"request_id"`
+	Data      EmailBouncesData `json:"data"`
 }
 
 type EmailBouncesCollector struct {
@@ -270,6 +270,159 @@ func (c *EmailBouncesCollector) Collect(ch chan<- prometheus.Metric) {
 	c.bouncePercent.Collect(ch)
 }
 
+// -----------------------------
+// EmailHistoryCollector
+// -----------------------------
+
+type EmailHistoryEntry struct {
+	Used         float64 `json:"used"`
+	ByteCount    float64 `json:"bytecount"`
+	AvgSize      float64 `json:"avgsize"`
+	EmailAddress string  `json:"email_address"`
+	Bounces      float64 `json:"bounces"`
+	Clicks       float64 `json:"clicks"`
+	Opens        float64 `json:"opens"`
+	Rejects      float64 `json:"rejects"`
+	Spam         float64 `json:"spam"`
+	Unsubscribes float64 `json:"unsubscribes"`
+}
+
+type EmailHistoryResponse struct {
+	RequestID string `json:"request_id"`
+	Data      struct {
+		History []EmailHistoryEntry `json:"history"`
+		Count   int                 `json:"count"`
+	} `json:"data"`
+}
+
+type EmailHistoryCollector struct {
+	mutex     sync.Mutex
+	apiURL    string
+	apiKey    string
+	debug     bool
+	namespace string
+
+	metrics map[string]*prometheus.GaugeVec
+}
+
+func NewEmailHistoryCollector(apiURL, apiKey string, debug bool) *EmailHistoryCollector {
+	ns := "smtp2go_email_history"
+
+	labels := []string{"email_address"}
+
+	return &EmailHistoryCollector{
+		apiURL:    apiURL,
+		apiKey:    apiKey,
+		debug:     debug,
+		namespace: ns,
+		metrics: map[string]*prometheus.GaugeVec{
+			"used": prometheus.NewGaugeVec(prometheus.GaugeOpts{
+				Namespace: ns,
+				Name:      "used",
+				Help:      "Number of emails used per email address",
+			}, labels),
+			"bytecount": prometheus.NewGaugeVec(prometheus.GaugeOpts{
+				Namespace: ns,
+				Name:      "bytecount",
+				Help:      "Total size in bytes of emails sent per email address",
+			}, labels),
+			"avgsize": prometheus.NewGaugeVec(prometheus.GaugeOpts{
+				Namespace: ns,
+				Name:      "avgsize",
+				Help:      "Average size of emails per email address",
+			}, labels),
+			"bounces": prometheus.NewGaugeVec(prometheus.GaugeOpts{
+				Namespace: ns,
+				Name:      "bounces",
+				Help:      "Number of bounces per email address",
+			}, labels),
+			"clicks": prometheus.NewGaugeVec(prometheus.GaugeOpts{
+				Namespace: ns,
+				Name:      "clicks",
+				Help:      "Number of clicks per email address",
+			}, labels),
+			"opens": prometheus.NewGaugeVec(prometheus.GaugeOpts{
+				Namespace: ns,
+				Name:      "opens",
+				Help:      "Number of opens per email address",
+			}, labels),
+			"rejects": prometheus.NewGaugeVec(prometheus.GaugeOpts{
+				Namespace: ns,
+				Name:      "rejects",
+				Help:      "Number of rejected emails per email address",
+			}, labels),
+			"spam": prometheus.NewGaugeVec(prometheus.GaugeOpts{
+				Namespace: ns,
+				Name:      "spam",
+				Help:      "Number of spam reports per email address",
+			}, labels),
+			"unsubscribes": prometheus.NewGaugeVec(prometheus.GaugeOpts{
+				Namespace: ns,
+				Name:      "unsubscribes",
+				Help:      "Number of unsubscribes per email address",
+			}, labels),
+		},
+	}
+}
+
+func (c *EmailHistoryCollector) Describe(ch chan<- *prometheus.Desc) {
+	for _, metric := range c.metrics {
+		metric.Describe(ch)
+	}
+}
+
+func (c *EmailHistoryCollector) Collect(ch chan<- prometheus.Metric) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	endpoint := c.apiURL + "/stats/email_history"
+
+	reqBody, _ := json.Marshal(map[string]string{"api_key": c.apiKey})
+	req, _ := http.NewRequest("POST", endpoint, bytes.NewBuffer(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Println("[email_history] HTTP request failed:", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	if c.debug {
+		log.Printf("[email_history] Raw response: %s\n", string(body))
+	}
+
+	var apiResp EmailHistoryResponse
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		log.Println("[email_history] Failed to parse JSON:", err)
+		return
+	}
+
+	// Reset metrics to remove outdated labels
+	for _, metric := range c.metrics {
+		metric.Reset()
+	}
+
+	for _, entry := range apiResp.Data.History {
+		labels := prometheus.Labels{"email_address": entry.EmailAddress}
+		c.metrics["used"].With(labels).Set(entry.Used)
+		c.metrics["bytecount"].With(labels).Set(entry.ByteCount)
+		c.metrics["avgsize"].With(labels).Set(entry.AvgSize)
+		c.metrics["bounces"].With(labels).Set(entry.Bounces)
+		c.metrics["clicks"].With(labels).Set(entry.Clicks)
+		c.metrics["opens"].With(labels).Set(entry.Opens)
+		c.metrics["rejects"].With(labels).Set(entry.Rejects)
+		c.metrics["spam"].With(labels).Set(entry.Spam)
+		c.metrics["unsubscribes"].With(labels).Set(entry.Unsubscribes)
+	}
+
+	for _, metric := range c.metrics {
+		metric.Collect(ch)
+	}
+}
+
 func main() {
 	apiURL := flag.String("apiURL", "https://api.smtp2go.com/v3", "Base URL of the API (e.g., https://api.smtp2go.com/v3)")
 	apiKey := flag.String("apiKey", "", "API key for authentication")
@@ -288,9 +441,11 @@ func main() {
 	// Register all collectors
 	emailCycle := NewEmailCycleCollector(*apiURL, *apiKey, *debug)
 	emailBounces := NewEmailBouncesCollector(*apiURL, *apiKey, *debug)
+	emailHistory := NewEmailHistoryCollector(*apiURL, *apiKey, *debug)
 
 	prometheus.MustRegister(emailCycle)
 	prometheus.MustRegister(emailBounces)
+	prometheus.MustRegister(emailHistory)
 
 	http.Handle("/metrics", promhttp.Handler())
 	log.Printf("Starting exporter on %s...\n", *listenAddr)
