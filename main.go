@@ -30,6 +30,29 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
+func doPostRequest(apiURL, endpoint, apiKey string, debug bool, logPrefix string) ([]byte, error) {
+	fullURL := apiURL + endpoint
+
+	reqBody, _ := json.Marshal(map[string]string{"api_key": apiKey})
+	req, _ := http.NewRequest("POST", fullURL, bytes.NewBuffer(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("[%s] HTTP request failed: %v", logPrefix, err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	if debug {
+		log.Printf("[%s] Raw response: %s\n", logPrefix, string(body))
+	}
+
+	return body, nil
+}
+
 // -----------------------------
 // EmailCycleCollector
 // -----------------------------
@@ -102,23 +125,9 @@ func (c *EmailCycleCollector) Collect(ch chan<- prometheus.Metric) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	endpoint := c.apiURL + "/stats/email_cycle"
-
-	reqBody, _ := json.Marshal(map[string]string{"api_key": c.apiKey})
-	req, _ := http.NewRequest("POST", endpoint, bytes.NewBuffer(reqBody))
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	body, err := doPostRequest(c.apiURL, "/stats/email_cycle", c.apiKey, c.debug, "email_cycle")
 	if err != nil {
-		log.Println("[email_cycle] HTTP request failed:", err)
 		return
-	}
-	defer resp.Body.Close()
-
-	body, _ := ioutil.ReadAll(resp.Body)
-	if c.debug {
-		log.Printf("[email_cycle] Raw response: %s\n", string(body))
 	}
 
 	var apiResp EmailCycleResponse
@@ -225,23 +234,9 @@ func (c *EmailBouncesCollector) Collect(ch chan<- prometheus.Metric) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	endpoint := c.apiURL + "/stats/email_bounces"
-
-	reqBody, _ := json.Marshal(map[string]string{"api_key": c.apiKey})
-	req, _ := http.NewRequest("POST", endpoint, bytes.NewBuffer(reqBody))
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	body, err := doPostRequest(c.apiURL, "/stats/email_bounces", c.apiKey, c.debug, "email_bounces")
 	if err != nil {
-		log.Println("[email_bounces] HTTP request failed:", err)
 		return
-	}
-	defer resp.Body.Close()
-
-	body, _ := ioutil.ReadAll(resp.Body)
-	if c.debug {
-		log.Printf("[email_bounces] Raw response: %s\n", string(body))
 	}
 
 	var apiResp EmailBouncesResponse
@@ -375,23 +370,9 @@ func (c *EmailHistoryCollector) Collect(ch chan<- prometheus.Metric) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	endpoint := c.apiURL + "/stats/email_history"
-
-	reqBody, _ := json.Marshal(map[string]string{"api_key": c.apiKey})
-	req, _ := http.NewRequest("POST", endpoint, bytes.NewBuffer(reqBody))
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	body, err := doPostRequest(c.apiURL, "/stats/email_history", c.apiKey, c.debug, "email_history")
 	if err != nil {
-		log.Println("[email_history] HTTP request failed:", err)
 		return
-	}
-	defer resp.Body.Close()
-
-	body, _ := ioutil.ReadAll(resp.Body)
-	if c.debug {
-		log.Printf("[email_history] Raw response: %s\n", string(body))
 	}
 
 	var apiResp EmailHistoryResponse
@@ -494,23 +475,9 @@ func (c *EmailSpamCollector) Collect(ch chan<- prometheus.Metric) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	endpoint := c.apiURL + "/stats/email_spam"
-
-	reqBody, _ := json.Marshal(map[string]string{"api_key": c.apiKey})
-	req, _ := http.NewRequest("POST", endpoint, bytes.NewBuffer(reqBody))
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	body, err := doPostRequest(c.apiURL, "/stats/email_spam", c.apiKey, c.debug, "email_spam")
 	if err != nil {
-		log.Println("[email_spam] HTTP request failed:", err)
 		return
-	}
-	defer resp.Body.Close()
-
-	body, _ := ioutil.ReadAll(resp.Body)
-	if c.debug {
-		log.Printf("[email_spam] Raw response: %s\n", string(body))
 	}
 
 	var apiResp EmailSpamResponse
@@ -608,23 +575,9 @@ func (c *EmailUnsubsCollector) Collect(ch chan<- prometheus.Metric) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	endpoint := c.apiURL + "/stats/email_unsubs"
-
-	reqBody, _ := json.Marshal(map[string]string{"api_key": c.apiKey})
-	req, _ := http.NewRequest("POST", endpoint, bytes.NewBuffer(reqBody))
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	body, err := doPostRequest(c.apiURL, "/stats/email_unsubs", c.apiKey, c.debug, "email_unsubs")
 	if err != nil {
-		log.Println("[email_unsubs] HTTP request failed:", err)
 		return
-	}
-	defer resp.Body.Close()
-
-	body, _ := ioutil.ReadAll(resp.Body)
-	if c.debug {
-		log.Printf("[email_unsubs] Raw response: %s\n", string(body))
 	}
 
 	var apiResp EmailUnsubsResponse
