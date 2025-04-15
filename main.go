@@ -428,15 +428,15 @@ func (c *EmailHistoryCollector) Collect(ch chan<- prometheus.Metric) {
 // -----------------------------
 
 type EmailSpamData struct {
-	Emails       float64 `json:"emails"`
-	Rejects      float64 `json:"rejects"`
-	Spams        float64 `json:"spams"`
-	SpamPercent  string  `json:"spam_percent"`
+	Emails      float64 `json:"emails"`
+	Rejects     float64 `json:"rejects"`
+	Spams       float64 `json:"spams"`
+	SpamPercent string  `json:"spam_percent"`
 }
 
 type EmailSpamResponse struct {
-	RequestID string         `json:"request_id"`
-	Data      EmailSpamData  `json:"data"`
+	RequestID string        `json:"request_id"`
+	Data      EmailSpamData `json:"data"`
 }
 
 type EmailSpamCollector struct {
@@ -446,10 +446,10 @@ type EmailSpamCollector struct {
 	debug     bool
 	namespace string
 
-	emails       prometheus.Gauge
-	rejects      prometheus.Gauge
-	spams        prometheus.Gauge
-	spamPercent  prometheus.Gauge
+	emails      prometheus.Gauge
+	rejects     prometheus.Gauge
+	spams       prometheus.Gauge
+	spamPercent prometheus.Gauge
 }
 
 func NewEmailSpamCollector(apiURL, apiKey string, debug bool) *EmailSpamCollector {
@@ -537,6 +537,120 @@ func (c *EmailSpamCollector) Collect(ch chan<- prometheus.Metric) {
 	c.spamPercent.Collect(ch)
 }
 
+// -----------------------------
+// EmailUnsubsCollector
+// -----------------------------
+
+type EmailUnsubsData struct {
+	Emails             float64 `json:"emails"`
+	Rejects            float64 `json:"rejects"`
+	Unsubscribes       float64 `json:"unsubscribes"`
+	UnsubscribePercent string  `json:"unsubscribe_percent"`
+}
+
+type EmailUnsubsResponse struct {
+	RequestID string          `json:"request_id"`
+	Data      EmailUnsubsData `json:"data"`
+}
+
+type EmailUnsubsCollector struct {
+	mutex     sync.Mutex
+	apiURL    string
+	apiKey    string
+	debug     bool
+	namespace string
+
+	emails             prometheus.Gauge
+	rejects            prometheus.Gauge
+	unsubscribes       prometheus.Gauge
+	unsubscribePercent prometheus.Gauge
+}
+
+func NewEmailUnsubsCollector(apiURL, apiKey string, debug bool) *EmailUnsubsCollector {
+	ns := "smtp2go_email_unsubs"
+
+	return &EmailUnsubsCollector{
+		apiURL:    apiURL,
+		apiKey:    apiKey,
+		debug:     debug,
+		namespace: ns,
+		emails: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: ns,
+			Name:      "emails",
+			Help:      "Number of emails processed",
+		}),
+		rejects: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: ns,
+			Name:      "rejects",
+			Help:      "Number of rejected emails",
+		}),
+		unsubscribes: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: ns,
+			Name:      "unsubscribes",
+			Help:      "Number of unsubscribes",
+		}),
+		unsubscribePercent: prometheus.NewGauge(prometheus.GaugeOpts{
+			Namespace: ns,
+			Name:      "unsubscribe_percent",
+			Help:      "Percentage of unsubscribes",
+		}),
+	}
+}
+
+func (c *EmailUnsubsCollector) Describe(ch chan<- *prometheus.Desc) {
+	c.emails.Describe(ch)
+	c.rejects.Describe(ch)
+	c.unsubscribes.Describe(ch)
+	c.unsubscribePercent.Describe(ch)
+}
+
+func (c *EmailUnsubsCollector) Collect(ch chan<- prometheus.Metric) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	endpoint := c.apiURL + "/stats/email_unsubs"
+
+	reqBody, _ := json.Marshal(map[string]string{"api_key": c.apiKey})
+	req, _ := http.NewRequest("POST", endpoint, bytes.NewBuffer(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Println("[email_unsubs] HTTP request failed:", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	if c.debug {
+		log.Printf("[email_unsubs] Raw response: %s\n", string(body))
+	}
+
+	var apiResp EmailUnsubsResponse
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		log.Println("[email_unsubs] Failed to parse JSON:", err)
+		return
+	}
+
+	data := apiResp.Data
+	c.emails.Set(data.Emails)
+	c.rejects.Set(data.Rejects)
+	c.unsubscribes.Set(data.Unsubscribes)
+
+	percent, err := strconv.ParseFloat(data.UnsubscribePercent, 64)
+	if err != nil {
+		log.Println("[email_unsubs] Failed to parse unsubscribe_percent:", err)
+	} else {
+		c.unsubscribePercent.Set(percent)
+	}
+
+	c.emails.Collect(ch)
+	c.rejects.Collect(ch)
+	c.unsubscribes.Collect(ch)
+	c.unsubscribePercent.Collect(ch)
+}
+
 func main() {
 	apiURL := flag.String("apiURL", "https://api.smtp2go.com/v3", "Base URL of the API (e.g., https://api.smtp2go.com/v3)")
 	apiKey := flag.String("apiKey", "", "API key for authentication")
@@ -557,11 +671,13 @@ func main() {
 	emailBounces := NewEmailBouncesCollector(*apiURL, *apiKey, *debug)
 	emailHistory := NewEmailHistoryCollector(*apiURL, *apiKey, *debug)
 	emailSpam := NewEmailSpamCollector(*apiURL, *apiKey, *debug)
+	emailUnsubs := NewEmailUnsubsCollector(*apiURL, *apiKey, *debug)
 
 	prometheus.MustRegister(emailCycle)
 	prometheus.MustRegister(emailBounces)
 	prometheus.MustRegister(emailHistory)
 	prometheus.MustRegister(emailSpam)
+	prometheus.MustRegister(emailUnsubs)
 
 	http.Handle("/metrics", promhttp.Handler())
 	log.Printf("Starting exporter on %s...\n", *listenAddr)

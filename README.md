@@ -90,6 +90,18 @@ smtp2go_email_spam_spam_percent 0
 # HELP smtp2go_email_spam_spams Number of emails marked as spam
 # TYPE smtp2go_email_spam_spams gauge
 smtp2go_email_spam_spams 0
+# HELP smtp2go_email_unsubs_emails Number of emails processed
+# TYPE smtp2go_email_unsubs_emails gauge
+smtp2go_email_unsubs_emails 416
+# HELP smtp2go_email_unsubs_rejects Number of rejected emails
+# TYPE smtp2go_email_unsubs_rejects gauge
+smtp2go_email_unsubs_rejects 108
+# HELP smtp2go_email_unsubs_unsubscribe_percent Percentage of unsubscribes
+# TYPE smtp2go_email_unsubs_unsubscribe_percent gauge
+smtp2go_email_unsubs_unsubscribe_percent 0
+# HELP smtp2go_email_unsubs_unsubscribes Number of unsubscribes
+# TYPE smtp2go_email_unsubs_unsubscribes gauge
+smtp2go_email_unsubs_unsubscribes 0
 ```
 
 ## TODO
