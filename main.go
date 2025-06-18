@@ -145,7 +145,7 @@ func (c *EmailCycleCollector) Collect(ch chan<- prometheus.Metric) {
 	if err != nil {
 		log.Println("[email_cycle] Failed to parse cycle_end timestamp:", err)
 	} else {
-		remainingSeconds := endTime.Sub(time.Now()).Seconds()
+		remainingSeconds := time.Until(endTime).Seconds()
 		c.remainingSeconds.Set(remainingSeconds)
 	}
 
