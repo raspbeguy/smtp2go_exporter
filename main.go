@@ -18,7 +18,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -45,7 +45,7 @@ func doPostRequest(apiURL, endpoint, apiKey string, debug bool, logPrefix string
 	}
 	defer resp.Body.Close()
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 	if debug {
 		log.Printf("[%s] Raw response: %s\n", logPrefix, string(body))
 	}
